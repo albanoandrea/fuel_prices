@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>I miei benzinai</title>
+<meta name="theme-color" content="#1F4F96">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Benzinai">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #E9ECEF;
+  --surface: #FFFFFF;
+  --ink: #1A1D21;
+  --muted: #5E6670;
+  --line: #D3D8DE;
+  --blue: #1F4F96;
+  --blue-ink: #FFFFFF;
+  --totem: #1B1F24;
+  --led: #FFB020;
+  --led-dim: #8A6A2A;
+  --down: #1E8A4C;
+  --up: #C23B2E;
+  --cond: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --body: "Barlow", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15181C; --surface: #1F2328; --ink: #EDEFF2; --muted: #9AA3AD;
+    --line: #2E343B; --blue: #3D74C7; --totem: #0E1013; --down: #45C27A; --up: #FF6B5C;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15181C; --surface: #1F2328; --ink: #EDEFF2; --muted: #9AA3AD;
+  --line: #2E343B; --blue: #3D74C7; --totem: #0E1013; --down: #45C27A; --up: #FF6B5C;
+}
+*, *::before, *::after { box-sizing: inherit; }
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--body); font-size: 16px; line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
+}
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--led); outline-offset: 2px; }
+
+.wrap { max-width: 560px; margin: 0 auto; padding: 0 14px 40px; }
+
+header { padding: 18px 0 10px; }
+h1 {
+  font-family: var(--cond); font-weight: 700; font-size: 30px;
+  line-height: 1; margin: 0 0 14px; letter-spacing: .01em;
+}
+.controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.seg {
+  display: flex; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; padding: 3px; gap: 2px;
+}
+.seg button {
+  border: 0; background: none; padding: 8px 11px; border-radius: 7px;
+  font-family: var(--cond); font-weight: 600; font-size: 17px; cursor: pointer;
+  color: var(--muted);
+}
+.seg button[aria-pressed="true"] { background: var(--blue); color: var(--blue-ink); }
+
+.list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.row {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  overflow: hidden;
+}
+.row.best { border-color: var(--led); box-shadow: inset 4px 0 0 var(--led); }
+.row-main {
+  display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center;
+  padding: 12px 12px 12px 14px; width: 100%; border: 0; background: none;
+  text-align: left; cursor: pointer;
+}
+.name { font-weight: 600; font-size: 17px; line-height: 1.2; }
+.meta { color: var(--muted); font-size: 14px; margin-top: 2px; }
+.info { font-size: 13px; margin-top: 5px; color: var(--muted); }
+.info .d { font-weight: 600; }
+.info .down { color: var(--down); }
+.info .up { color: var(--up); }
+.info .old { color: var(--up); }
+.best-tag { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 3px; }
+
+.totem {
+  background: var(--totem); border-radius: 8px; padding: 6px 10px 5px;
+  min-width: 96px; text-align: right;
+  font-family: var(--cond); font-weight: 600; color: var(--led);
+  font-variant-numeric: tabular-nums; line-height: 1;
+  text-shadow: 0 0 8px rgba(255,176,32,.35);
+}
+.totem .big { font-size: 34px; letter-spacing: .02em; }
+.totem .small { font-size: 20px; vertical-align: top; position: relative; top: 2px; }
+.totem .mode { display: block; font-size: 12px; color: var(--led-dim); text-shadow: none; margin-top: 3px; letter-spacing: .04em; }
+.totem.none { color: var(--led-dim); text-shadow: none; }
+.totem.none .big { font-size: 26px; }
+
+.detail { border-top: 1px solid var(--line); padding: 10px 14px 14px; font-size: 15px; }
+.detail table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.detail td { padding: 4px 0; border-bottom: 1px solid var(--line); }
+.detail td.p { text-align: right; font-weight: 600; }
+.detail td.dt { text-align: right; color: var(--muted); font-size: 13px; padding-left: 10px; }
+.detail .addr { color: var(--muted); margin: 0 0 8px; }
+.actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; border-radius: 9px;
+  padding: 9px 14px; font-weight: 600; font-size: 15px; text-decoration: none;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.btn.primary { background: var(--blue); color: var(--blue-ink); border-color: var(--blue); }
+.btn.danger { color: var(--up); }
+
+.add { margin-top: 14px; width: 100%; justify-content: center; padding: 13px; font-size: 16px; }
+
+.empty { background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; padding: 20px; margin-top: 14px; }
+.empty p { margin: 0 0 12px; }
+
+footer { color: var(--muted); font-size: 13px; margin-top: 22px; }
+footer a { color: inherit; }
+
+/* Pannello ricerca */
+.sheet {
+  position: fixed; inset: 0; background: var(--bg); z-index: 10;
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.sheet[hidden] { display: none; }
+.sheet-head { padding: 12px 14px; display: flex; gap: 8px; align-items: center; max-width: 560px; width: 100%; margin: 0 auto; }
+.sheet-head input {
+  flex: 1; font: inherit; font-size: 17px; padding: 11px 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); min-width: 0;
+}
+.sheet-body { overflow-y: auto; flex: 1; padding: 0 14px calc(20px + env(safe-area-inset-bottom, 0px)); }
+.sheet-body .inner { max-width: 560px; margin: 0 auto; }
+.res { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.star {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 50%;
+  width: 44px; height: 44px; font-size: 22px; cursor: pointer; line-height: 1;
+}
+.star[aria-pressed="true"] { background: var(--led); border-color: var(--led); color: #1B1F24; }
+.hint { color: var(--muted); padding: 14px 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .detail { animation: open .18s ease-out; }
+  @keyframes open { from { opacity: 0; transform: translateY(-4px); } }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>I miei benzinai</h1>
+    <div class="controls">
+      <div class="seg" id="fuel" role="group" aria-label="Carburante"></div>
+      <div class="seg" id="mode" role="group" aria-label="Modalità"></div>
+    </div>
+  </header>
+
+  <main id="main"><p class="hint">Carico i prezzi…</p></main>
+
+  <footer id="foot"></footer>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-head">
+    <input id="q" type="search" placeholder="Nome, via, comune o marchio" autocomplete="off" aria-label="Cerca un benzinaio">
+    <button class="btn" id="close">Fatto</button>
+  </div>
+  <div class="sheet-body"><div class="inner" id="results"></div></div>
+</div>
+
+<script>
+const FUELS = ["Benzina", "Gasolio", "GPL", "Metano"];
+const MODES = [["1", "Self"], ["0", "Servito"]];
+
+const store = {
+  get(k, def) { try { const v = localStorage.getItem(k); return v === null ? def : JSON.parse(v); } catch (e) { return def; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+
+let data = null;
+let fav = store.get("preferiti", []);
+let fuel = store.get("carburante", "Benzina");
+let mode = store.get("modalita", "1");
+let open = null;
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function titleCase(s) {
+  if (!s) return "";
+  if (s !== s.toUpperCase()) return s;
+  return s.toLowerCase().replace(/(^|[\s'’\-\/(])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+}
+
+function parseD(s) {
+  const m = /(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/.exec(s || "");
+  return m ? new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]) : null;
+}
+const MESI = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
+function shortDate(d) { return d ? `${d.getDate()} ${MESI[d.getMonth()]}` : ""; }
+function daysAgo(d) { return d ? Math.floor((Date.now() - d.getTime()) / 86400000) : 999; }
+function fmt(p) { return p.toFixed(3).replace(".", ","); }
+
+/* Prezzo del carburante scelto; se manca la modalità scelta, usa l'altra. */
+function priceOf(st, f = fuel, m = mode) {
+  const e = st.prezzi[`${f}|${m}`];
+  if (e) return { ...e, m, fallback: false };
+  const other = m === "1" ? "0" : "1";
+  const e2 = st.prezzi[`${f}|${other}`];
+  return e2 ? { ...e2, m: other, fallback: true } : null;
+}
+
+function totem(pr) {
+  if (!pr) return `<div class="totem none"><span class="big">—</span><span class="mode">non c'è</span></div>`;
+  const s = fmt(pr.p);
+  return `<div class="totem" aria-label="${s} euro al ${fuel === "Metano" ? "chilo" : "litro"}">` +
+    `<span class="big">${s.slice(0, -1)}</span><span class="small">${s.slice(-1)}</span>` +
+    `<span class="mode">${pr.m === "1" ? "self" : "servito"}</span></div>`;
+}
+
+function infoLine(pr) {
+  if (!pr) return "";
+  const d = parseD(pr.d);
+  const age = daysAgo(d);
+  let t = age > 7
+    ? `<span class="old">Prezzo del ${shortDate(d)}, potrebbe essere cambiato</span>`
+    : `Comunicato il ${shortDate(d)}`;
+  if (pr.pp != null && pr.pp !== pr.p) {
+    const diff = pr.p - pr.pp;
+    const cls = diff < 0 ? "down" : "up";
+    const cent = Math.round(Math.abs(diff) * 1000) / 10;
+    t += `, <span class="d ${cls}">${diff < 0 ? "▼" : "▲"} ${String(cent).replace(".", ",")} cent</span>`;
+  }
+  return t;
+}
+
+function buildSeg() {
+  $("#fuel").innerHTML = FUELS.map((f) => `<button data-f="${f}" aria-pressed="${f === fuel}">${f}</button>`).join("");
+  $("#mode").innerHTML = MODES.map(([k, l]) => `<button data-m="${k}" aria-pressed="${k === mode}">${l}</button>`).join("");
+}
+$("#fuel").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  fuel = b.dataset.f; store.set("carburante", fuel); buildSeg(); render();
+});
+$("#mode").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  mode = b.dataset.m; store.set("modalita", mode); buildSeg(); render();
+});
+
+function detail(id, st) {
+  const rows = Object.entries(st.prezzi)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => {
+      const [f, m] = k.split("|");
+      return `<tr><td>${esc(f)} ${m === "1" ? "self" : "servito"}</td><td class="p">${fmt(v.p)} €</td><td class="dt">${shortDate(parseD(v.d))}</td></tr>`;
+    }).join("");
+  const q = st.lat && st.lon ? `${st.lat},${st.lon}` : `${st.i} ${st.c}`;
+  const maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+  return `<div class="detail">
+    <p class="addr">${esc(titleCase(st.i))}, ${esc(titleCase(st.c))} (${esc(st.pr)})</p>
+    <table>${rows || "<tr><td>Nessun prezzo</td></tr>"}</table>
+    <div class="actions">
+      <a class="btn primary" href="${maps}" target="_blank" rel="noopener">Apri in Maps</a>
+      <button class="btn danger" data-remove="${esc(id)}">Togli dai miei</button>
+    </div></div>`;
+}
+
+function render() {
+  const main = $("#main");
+  if (!data) return;
+  const list = fav.filter((id) => data.impianti[id]).map((id) => ({ id, st: data.impianti[id], pr: priceOf(data.impianti[id]) }));
+  if (!list.length) {
+    main.innerHTML = `<div class="empty"><p>Non hai ancora scelto nessun benzinaio. Cercalo per nome, via o comune e tocca la stella per aggiungerlo.</p>
+      <button class="btn primary" id="add1">Aggiungi un benzinaio</button></div>`;
+    $("#add1").onclick = openSheet;
+    return;
+  }
+  list.sort((a, b) => (a.pr ? a.pr.p : 99) - (b.pr ? b.pr.p : 99));
+  const bestP = list[0].pr ? list[0].pr.p : null;
+  main.innerHTML = `<ul class="list">${list.map(({ id, st, pr }) => {
+    const best = list.length > 1 && pr && pr.p === bestP;
+    return `<li class="row${best ? " best" : ""}">
+      <button class="row-main" data-open="${esc(id)}" aria-expanded="${open === id}">
+        <div>
+          ${best ? `<div class="best-tag">Il più economico</div>` : ""}
+          <div class="name">${esc(titleCase(st.n) || titleCase(st.b))}</div>
+          <div class="meta">${esc(st.b)}, ${esc(titleCase(st.c))}</div>
+          <div class="info">${infoLine(pr)}</div>
+        </div>
+        ${totem(pr)}
+      </button>
+      ${open === id ? detail(id, st) : ""}
+    </li>`;
+  }).join("")}</ul>
+  <button class="btn add" id="add2">Aggiungi un benzinaio</button>`;
+  $("#add2").onclick = openSheet;
+}
+
+$("#main").addEventListener("click", (e) => {
+  const o = e.target.closest("[data-open]");
+  if (o) { open = open === o.dataset.open ? null : o.dataset.open; render(); return; }
+  const r = e.target.closest("[data-remove]");
+  if (r) { toggleFav(r.dataset.remove); open = null; render(); }
+});
+
+function toggleFav(id) {
+  fav = fav.includes(id) ? fav.filter((x) => x !== id) : [...fav, id];
+  store.set("preferiti", fav);
+}
+
+/* Ricerca */
+function norm(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
+let index = [];
+function buildIndex() {
+  index = Object.entries(data.impianti).map(([id, st]) => ({ id, st, t: norm(`${st.n} ${st.b} ${st.g} ${st.i} ${st.c}`) }));
+}
+function search() {
+  const words = norm($("#q").value).split(/\s+/).filter(Boolean);
+  const out = $("#results");
+  if (!words.length) {
+    out.innerHTML = `<p class="hint">Scrivi almeno una parola, per esempio il nome della via o del comune.</p>`;
+    return;
+  }
+  const hits = index.filter((x) => words.every((w) => x.t.includes(w))).slice(0, 60);
+  if (!hits.length) { out.innerHTML = `<p class="hint">Nessun benzinaio trovato. Prova con meno parole, oppure controlla la provincia in config.json.</p>`; return; }
+  out.innerHTML = hits.map(({ id, st }) => {
+    const pr = priceOf(st);
+    const on = fav.includes(id);
+    return `<div class="res">
+      <div>
+        <div class="name">${esc(titleCase(st.n) || titleCase(st.b))}</div>
+        <div class="meta">${esc(st.b)}, ${esc(titleCase(st.i))}, ${esc(titleCase(st.c))}</div>
+        <div class="info">${pr ? `${fuel} ${pr.m === "1" ? "self" : "servito"}: <strong>${fmt(pr.p)} €</strong>` : `${fuel}: non disponibile`}</div>
+      </div>
+      <button class="star" data-star="${esc(id)}" aria-pressed="${on}" aria-label="${on ? "Togli dai miei" : "Aggiungi ai miei"}">${on ? "★" : "☆"}</button>
+    </div>`;
+  }).join("");
+}
+$("#results").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-star]"); if (!b) return;
+  toggleFav(b.dataset.star); search();
+});
+let timer;
+$("#q").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(search, 150); });
+function openSheet() { $("#sheet").hidden = false; search(); $("#q").focus(); }
+$("#close").onclick = () => { $("#sheet").hidden = true; render(); };
+
+/* Avvio */
+async function load() {
+  try {
+    const r = await fetch(`data.json?t=${Date.now()}`, { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    data = await r.json();
+  } catch (e) {
+    $("#main").innerHTML = `<div class="empty"><p>I prezzi non sono ancora pronti. Su GitHub apri la scheda Actions, scegli “Aggiorna prezzi” e premi “Run workflow”. Poi ricarica questa pagina.</p></div>`;
+    return;
+  }
+  buildIndex();
+  const n = Object.keys(data.impianti).length;
+  const quando = data.estrazione ? data.estrazione.split("-").reverse().join("/") : "";
+  $("#foot").innerHTML = `Dati ufficiali MIMIT${quando ? ` del ${quando}` : ""}, ${n} benzinai in provincia di ${esc((data.province || []).join(", "))}. ` +
+    `Fonte: <a href="https://www.mimit.gov.it/it/open-data/elenco-dataset/carburanti-prezzi-praticati-e-anagrafica-degli-impianti" target="_blank" rel="noopener">open data MIMIT</a>, licenza IODL 2.0.`;
+  render();
+}
+
+buildSeg();
+load();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>

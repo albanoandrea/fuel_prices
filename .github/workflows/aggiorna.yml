@@ -1,0 +1,52 @@
+name: Aggiorna prezzi
+
+on:
+  schedule:
+    # Ogni giorno alle 07:30 e alle 12:30 UTC (circa 9:30 e 14:30 in Italia)
+    - cron: "30 7 * * *"
+    - cron: "30 12 * * *"
+  workflow_dispatch: {}
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: aggiorna
+  cancel-in-progress: false
+
+jobs:
+  aggiorna:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Scarica i prezzi dal MIMIT
+        run: python scripts/aggiorna.py
+
+      - name: Salva data.json nel repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data.json
+          git diff --cached --quiet || git commit -m "Prezzi aggiornati $(date -u +%Y-%m-%d)"
+          git push
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
