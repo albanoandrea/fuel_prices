@@ -125,6 +125,7 @@ h1 {
   border-radius: 9px; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
 }
 .orig { color: var(--muted); margin: 0 0 2px; font-weight: 600; }
+.seg[hidden] { display: none; }
 .geomsg { color: var(--up); font-size: 14px; margin: 8px 0 0; }
 
 .add { margin-top: 14px; width: 100%; justify-content: center; padding: 13px; font-size: 16px; }
@@ -171,6 +172,9 @@ footer a { color: inherit; }
       <div class="seg" id="fuel" role="group" aria-label="Carburante"></div>
       <div class="seg" id="mode" role="group" aria-label="Modalità"></div>
       <div class="seg"><button id="geo" aria-pressed="false">Distanza</button></div>
+      <div class="seg" id="sort" role="group" aria-label="Ordina per" hidden>
+        <button data-s="prezzo">Prezzo</button><button data-s="distanza">Vicino</button>
+      </div>
     </div>
     <p class="geomsg" id="geomsg" hidden></p>
   </header>
@@ -205,6 +209,7 @@ let open = null;
 let nicks = store.get("nomi", {});
 let wantPos = store.get("distanza", false);
 let pos = null;
+let sortBy = store.get("ordine", "prezzo");
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -229,12 +234,16 @@ function officialName(st) { return titleCase(st.n) || titleCase(st.b); }
 function displayName(id, st) { return nicks[id] || officialName(st); }
 
 /* Distanza in linea d'aria dalla posizione attuale. */
-function dist(st) {
-  if (!pos || !st.lat || !st.lon) return "";
+function kmOf(st) {
+  if (!pos || !st.lat || !st.lon) return null;
   const r = Math.PI / 180;
   const a = Math.sin((st.lat - pos.lat) * r / 2) ** 2 +
     Math.cos(pos.lat * r) * Math.cos(st.lat * r) * Math.sin((st.lon - pos.lon) * r / 2) ** 2;
-  const km = 12742 * Math.asin(Math.sqrt(a));
+  return 12742 * Math.asin(Math.sqrt(a));
+}
+function dist(st) {
+  const km = kmOf(st);
+  if (km === null) return "";
   if (km < 1) return `${Math.round(km * 100) * 10} m`;
   return `${(km < 10 ? km.toFixed(1) : Math.round(km).toString()).replace(".", ",")} km`;
 }
@@ -318,8 +327,12 @@ function render() {
     $("#add1").onclick = openSheet;
     return;
   }
-  list.sort((a, b) => (a.pr ? a.pr.p : 99) - (b.pr ? b.pr.p : 99));
-  const bestP = list[0].pr ? list[0].pr.p : null;
+  const byPrice = (a, b) => (a.pr ? a.pr.p : 99) - (b.pr ? b.pr.p : 99);
+  const byDist = (a, b) => (kmOf(a.st) ?? 1e9) - (kmOf(b.st) ?? 1e9) || byPrice(a, b);
+  list.sort(sortBy === "distanza" && pos ? byDist : byPrice);
+  /* Il più economico resta evidenziato anche quando si ordina per distanza. */
+  const prices = list.filter((x) => x.pr).map((x) => x.pr.p);
+  const bestP = prices.length ? Math.min(...prices) : null;
   main.innerHTML = `<ul class="list">${list.map(({ id, st, pr }) => {
     const best = list.length > 1 && pr && pr.p === bestP;
     return `<li class="row${best ? " best" : ""}">
@@ -408,7 +421,7 @@ function locate() {
   if (!wantPos) return;
   if (!("geolocation" in navigator)) { geoMsg("Questo browser non sa trovare la posizione."); return; }
   navigator.geolocation.getCurrentPosition(
-    (p) => { pos = { lat: p.coords.latitude, lon: p.coords.longitude }; geoMsg(""); refresh(); },
+    (p) => { pos = { lat: p.coords.latitude, lon: p.coords.longitude }; geoMsg(""); geoButton(); refresh(); },
     (err) => {
       if (err.code === 1) {
         wantPos = false; store.set("distanza", false); pos = null; geoButton(); refresh();
@@ -420,7 +433,16 @@ function locate() {
     { enableHighAccuracy: false, maximumAge: 120000, timeout: 20000 }
   );
 }
-function geoButton() { $("#geo").setAttribute("aria-pressed", wantPos); }
+function geoButton() {
+  $("#geo").setAttribute("aria-pressed", wantPos);
+  /* L'ordine per distanza serve solo quando la posizione è nota. */
+  $("#sort").hidden = !(wantPos && pos);
+  $("#sort").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.s === sortBy));
+}
+$("#sort").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  sortBy = b.dataset.s; store.set("ordine", sortBy); geoButton(); render();
+});
 $("#geo").addEventListener("click", () => {
   wantPos = !wantPos; store.set("distanza", wantPos); geoButton();
   if (wantPos) locate(); else { pos = null; geoMsg(""); refresh(); }
