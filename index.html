@@ -119,6 +119,14 @@ h1 {
 .btn.primary { background: var(--blue); color: var(--blue-ink); border-color: var(--blue); }
 .btn.danger { color: var(--up); }
 
+.nick { display: block; margin-top: 12px; font-size: 14px; color: var(--muted); }
+.nick input {
+  display: block; width: 100%; margin-top: 4px; font: inherit; font-size: 16px; padding: 9px 11px;
+  border-radius: 9px; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+}
+.orig { color: var(--muted); margin: 0 0 2px; font-weight: 600; }
+.geomsg { color: var(--up); font-size: 14px; margin: 8px 0 0; }
+
 .add { margin-top: 14px; width: 100%; justify-content: center; padding: 13px; font-size: 16px; }
 
 .empty { background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; padding: 20px; margin-top: 14px; }
@@ -162,7 +170,9 @@ footer a { color: inherit; }
     <div class="controls">
       <div class="seg" id="fuel" role="group" aria-label="Carburante"></div>
       <div class="seg" id="mode" role="group" aria-label="Modalità"></div>
+      <div class="seg"><button id="geo" aria-pressed="false">Distanza</button></div>
     </div>
+    <p class="geomsg" id="geomsg" hidden></p>
   </header>
 
   <main id="main"><p class="hint">Carico i prezzi…</p></main>
@@ -192,6 +202,9 @@ let fav = store.get("preferiti", []);
 let fuel = store.get("carburante", "Benzina");
 let mode = store.get("modalita", "1");
 let open = null;
+let nicks = store.get("nomi", {});
+let wantPos = store.get("distanza", false);
+let pos = null;
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -210,6 +223,22 @@ const MESI = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ot
 function shortDate(d) { return d ? `${d.getDate()} ${MESI[d.getMonth()]}` : ""; }
 function daysAgo(d) { return d ? Math.floor((Date.now() - d.getTime()) / 86400000) : 999; }
 function fmt(p) { return p.toFixed(3).replace(".", ","); }
+
+/* Il nickname, se c'è, prende il posto del nome ufficiale. */
+function officialName(st) { return titleCase(st.n) || titleCase(st.b); }
+function displayName(id, st) { return nicks[id] || officialName(st); }
+
+/* Distanza in linea d'aria dalla posizione attuale. */
+function dist(st) {
+  if (!pos || !st.lat || !st.lon) return "";
+  const r = Math.PI / 180;
+  const a = Math.sin((st.lat - pos.lat) * r / 2) ** 2 +
+    Math.cos(pos.lat * r) * Math.cos(st.lat * r) * Math.sin((st.lon - pos.lon) * r / 2) ** 2;
+  const km = 12742 * Math.asin(Math.sqrt(a));
+  if (km < 1) return `${Math.round(km * 100) * 10} m`;
+  return `${(km < 10 ? km.toFixed(1) : Math.round(km).toString()).replace(".", ",")} km`;
+}
+function withDist(text, st) { const d = dist(st); return d ? `${text} · ${d}` : text; }
 
 /* Prezzo del carburante scelto; se manca la modalità scelta, usa l'altra. */
 function priceOf(st, f = fuel, m = mode) {
@@ -267,8 +296,12 @@ function detail(id, st) {
   const q = st.lat && st.lon ? `${st.lat},${st.lon}` : `${st.i} ${st.c}`;
   const maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
   return `<div class="detail">
+    ${nicks[id] ? `<p class="orig">${esc(officialName(st))}</p>` : ""}
     <p class="addr">${esc(titleCase(st.i))}, ${esc(titleCase(st.c))} (${esc(st.pr)})</p>
     <table>${rows || "<tr><td>Nessun prezzo</td></tr>"}</table>
+    <label class="nick">Il tuo nome per questo benzinaio
+      <input data-nick="${esc(id)}" value="${esc(nicks[id])}" maxlength="40" placeholder="Per esempio: quello sotto casa" autocomplete="off" enterkeyhint="done">
+    </label>
     <div class="actions">
       <a class="btn primary" href="${maps}" target="_blank" rel="noopener">Apri in Maps</a>
       <button class="btn danger" data-remove="${esc(id)}">Togli dai miei</button>
@@ -293,8 +326,8 @@ function render() {
       <button class="row-main" data-open="${esc(id)}" aria-expanded="${open === id}">
         <div>
           ${best ? `<div class="best-tag">Il più economico</div>` : ""}
-          <div class="name">${esc(titleCase(st.n) || titleCase(st.b))}</div>
-          <div class="meta">${esc(st.b)}, ${esc(titleCase(st.c))}</div>
+          <div class="name">${esc(displayName(id, st))}</div>
+          <div class="meta">${esc(withDist(`${st.b}, ${titleCase(st.c)}`, st))}</div>
           <div class="info">${infoLine(pr)}</div>
         </div>
         ${totem(pr)}
@@ -312,6 +345,19 @@ $("#main").addEventListener("click", (e) => {
   const r = e.target.closest("[data-remove]");
   if (r) { toggleFav(r.dataset.remove); open = null; render(); }
 });
+/* Salva il nickname quando si esce dal campo o si preme Invio. */
+$("#main").addEventListener("change", (e) => {
+  const inp = e.target.closest("[data-nick]"); if (!inp) return;
+  const id = inp.dataset.nick, v = inp.value.trim();
+  if (v) nicks[id] = v; else delete nicks[id];
+  store.set("nomi", nicks);
+  buildIndex();
+  const n = [...document.querySelectorAll("[data-open]")].find((b) => b.dataset.open === id);
+  if (n) n.querySelector(".name").textContent = displayName(id, data.impianti[id]);
+});
+$("#main").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.closest("[data-nick]")) e.target.blur();
+});
 
 function toggleFav(id) {
   fav = fav.includes(id) ? fav.filter((x) => x !== id) : [...fav, id];
@@ -322,7 +368,7 @@ function toggleFav(id) {
 function norm(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
 let index = [];
 function buildIndex() {
-  index = Object.entries(data.impianti).map(([id, st]) => ({ id, st, t: norm(`${st.n} ${st.b} ${st.g} ${st.i} ${st.c}`) }));
+  index = Object.entries(data.impianti).map(([id, st]) => ({ id, st, t: norm(`${nicks[id] || ""} ${st.n} ${st.b} ${st.g} ${st.i} ${st.c}`) }));
 }
 function search() {
   const words = norm($("#q").value).split(/\s+/).filter(Boolean);
@@ -338,8 +384,8 @@ function search() {
     const on = fav.includes(id);
     return `<div class="res">
       <div>
-        <div class="name">${esc(titleCase(st.n) || titleCase(st.b))}</div>
-        <div class="meta">${esc(st.b)}, ${esc(titleCase(st.i))}, ${esc(titleCase(st.c))}</div>
+        <div class="name">${esc(displayName(id, st))}</div>
+        <div class="meta">${esc(withDist(`${st.b}, ${titleCase(st.i)}, ${titleCase(st.c)}`, st))}</div>
         <div class="info">${pr ? `${fuel} ${pr.m === "1" ? "self" : "servito"}: <strong>${fmt(pr.p)} €</strong>` : `${fuel}: non disponibile`}</div>
       </div>
       <button class="star" data-star="${esc(id)}" aria-pressed="${on}" aria-label="${on ? "Togli dai miei" : "Aggiungi ai miei"}">${on ? "★" : "☆"}</button>
@@ -354,6 +400,33 @@ let timer;
 $("#q").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(search, 150); });
 function openSheet() { $("#sheet").hidden = false; search(); $("#q").focus(); }
 $("#close").onclick = () => { $("#sheet").hidden = true; render(); };
+
+/* Posizione: chiesta solo dopo aver toccato "Distanza". */
+function geoMsg(t) { const m = $("#geomsg"); m.textContent = t || ""; m.hidden = !t; }
+function refresh() { render(); if (!$("#sheet").hidden) search(); }
+function locate() {
+  if (!wantPos) return;
+  if (!("geolocation" in navigator)) { geoMsg("Questo browser non sa trovare la posizione."); return; }
+  navigator.geolocation.getCurrentPosition(
+    (p) => { pos = { lat: p.coords.latitude, lon: p.coords.longitude }; geoMsg(""); refresh(); },
+    (err) => {
+      if (err.code === 1) {
+        wantPos = false; store.set("distanza", false); pos = null; geoButton(); refresh();
+        geoMsg("Il permesso per la posizione è bloccato. Puoi attivarlo dalle impostazioni del browser per questo sito.");
+      } else if (!pos) {
+        geoMsg("Non riesco a trovare la tua posizione. Riprova tra poco.");
+      }
+    },
+    { enableHighAccuracy: false, maximumAge: 120000, timeout: 20000 }
+  );
+}
+function geoButton() { $("#geo").setAttribute("aria-pressed", wantPos); }
+$("#geo").addEventListener("click", () => {
+  wantPos = !wantPos; store.set("distanza", wantPos); geoButton();
+  if (wantPos) locate(); else { pos = null; geoMsg(""); refresh(); }
+});
+/* Quando riapri l'app, aggiorna la posizione. */
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") locate(); });
 
 /* Avvio */
 async function load() {
@@ -374,7 +447,9 @@ async function load() {
 }
 
 buildSeg();
+geoButton();
 load();
+locate();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
 </body>
