@@ -124,6 +124,7 @@ h1 {
   display: block; width: 100%; margin-top: 4px; font: inherit; font-size: 16px; padding: 9px 11px;
   border-radius: 9px; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
 }
+.code { color: var(--muted); font-size: 13px; margin: -4px 0 8px; }
 .orig { color: var(--muted); margin: 0 0 2px; font-weight: 600; }
 .seg[hidden] { display: none; }
 .geomsg { color: var(--up); font-size: 14px; margin: 8px 0 0; }
@@ -307,6 +308,7 @@ function detail(id, st) {
   return `<div class="detail">
     ${nicks[id] ? `<p class="orig">${esc(officialName(st))}</p>` : ""}
     <p class="addr">${esc(titleCase(st.i))}, ${esc(titleCase(st.c))} (${esc(st.pr)})</p>
+    <p class="code">Codice MIMIT: ${esc(id)}</p>
     <table>${rows || "<tr><td>Nessun prezzo</td></tr>"}</table>
     <label class="nick">Il tuo nome per questo benzinaio
       <input data-nick="${esc(id)}" value="${esc(nicks[id])}" maxlength="40" placeholder="Per esempio: quello sotto casa" autocomplete="off" enterkeyhint="done">
