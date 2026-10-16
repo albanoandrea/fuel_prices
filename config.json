@@ -2,5 +2,5 @@
   "_nota": "Scrivi qui le sigle delle province dove fai benzina (esempio: MI, MB, BG). Poi scegli i tuoi benzinai direttamente dall'app.",
   "province": ["MI", "BG"],
   "_nota_live": "Codici MIMIT dei benzinai da aggiornare in tempo reale ogni ora. Il codice si legge nel dettaglio del benzinaio nell'app.",
-  "live": ["53735", "51142", "53461", "15101", "34825", "11663", "7295"]
+  "live": ["53735", "51142", "53461", "15101", "25767", "13397", "54579", "44731", "34825", "11663", "48200", "57625", "61604", "7295", "63565"]
 }
