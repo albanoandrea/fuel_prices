@@ -35,7 +35,7 @@ CONFIG = ROOT / "config.json"
 OUTPUT = ROOT / "data.json"
 
 
-def scarica(url, tentativi=4):
+def scarica(url, tentativi=3, timeout=60):
     headers = {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) prezzi-benzina/1.0",
         "Accept": "text/csv,*/*",
@@ -43,7 +43,7 @@ def scarica(url, tentativi=4):
     for n in range(1, tentativi + 1):
         try:
             req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=120) as r:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
                 raw = r.read()
             for enc in ("utf-8-sig", "cp1252", "latin-1"):
                 try:
@@ -114,7 +114,7 @@ def aggiorna_live(impianti, ids):
             print(f"Live: {iid} non è nelle province di config.json", file=sys.stderr)
             continue
         try:
-            dati = json.loads(scarica(URL_LIVE.format(iid), tentativi=2))
+            dati = json.loads(scarica(URL_LIVE.format(iid), tentativi=2, timeout=30))
         except Exception as e:  # noqa: BLE001
             print(f"Live: impossibile leggere {iid}: {e}", file=sys.stderr)
             continue
@@ -137,16 +137,26 @@ def main():
     if not province:
         sys.exit("Nessuna provincia in config.json")
 
-    vecchi = {}
+    vecchio = {}
     if OUTPUT.exists():
         try:
-            vecchi = json.loads(OUTPUT.read_text(encoding="utf-8")).get("impianti", {})
+            vecchio = json.loads(OUTPUT.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
-            vecchi = {}
+            vecchio = {}
+    vecchi = vecchio.get("impianti", {})
 
-    _, anagrafica = leggi_csv(scarica(URL_ANAGRAFICA))
-    estrazione, prezzi = leggi_csv(scarica(URL_PREZZI))
-    print(f"Anagrafica: {len(anagrafica)} righe, prezzi: {len(prezzi)} righe")
+    # Se il MIMIT non risponde si riparte dal data.json precedente:
+    # i prezzi "live" arrivano da un altro server e possono funzionare lo stesso.
+    try:
+        _, anagrafica = leggi_csv(scarica(URL_ANAGRAFICA))
+        estrazione, prezzi = leggi_csv(scarica(URL_PREZZI))
+        print(f"Anagrafica: {len(anagrafica)} righe, prezzi: {len(prezzi)} righe")
+    except RuntimeError as e:
+        if not vecchi:
+            raise
+        print(f"{e}: uso i dati del data.json precedente", file=sys.stderr)
+        anagrafica, prezzi = [], []
+        estrazione = vecchio.get("estrazione", "")
 
     impianti = {}
     for a in anagrafica:
