@@ -36,7 +36,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Se data.json è stato aggiornato a mano (scripts/aggiorna_a_mano.py) si pubblica e basta.
       - name: Scarica i prezzi dal MIMIT
+        if: ${{ !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'Prezzi aggiornati a mano')) }}
         run: python scripts/aggiorna.py
 
       - name: Salva data.json nel repository
