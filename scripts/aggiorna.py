@@ -16,7 +16,7 @@ import json
 import sys
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -60,7 +60,8 @@ def scarica(url, tentativi=3, timeout=60):
                     continue
         except Exception as e:  # noqa: BLE001
             print(f"Errore download {url} (tentativo {n}): {e}", file=sys.stderr)
-            time.sleep(10 * n)
+            if n < tentativi:
+                time.sleep(10 * n)
     raise RuntimeError(f"Impossibile scaricare {url}")
 
 
@@ -115,8 +116,13 @@ def aggiorna_prezzo(prezzi, chiave, prezzo, d):
 
 
 def aggiorna_live(impianti, ids):
-    """Prezzi in tempo reale per pochi distributori. Se non risponde, si va avanti."""
+    """Prezzi in tempo reale per pochi distributori. Se non risponde, si va avanti.
+
+    Se fallisce già il primo, il server è giù (o ci blocca): inutile aspettare
+    il timeout di tutti gli altri.
+    """
     aggiornati = 0
+    letti = 0
     falliti = []
     for iid in ids:
         if iid not in impianti:
@@ -126,8 +132,13 @@ def aggiorna_live(impianti, ids):
             dati = json.loads(scarica(URL_LIVE.format(iid), tentativi=2, timeout=30))
         except Exception as e:  # noqa: BLE001
             print(f"Live: impossibile leggere {iid}: {e}", file=sys.stderr)
+            if not letti:
+                avviso("Il server dei prezzi in tempo reale non risponde: "
+                       "nessun benzinaio \"live\" aggiornato")
+                return aggiornati
             falliti.append(iid)
             continue
+        letti += 1
         for f in dati.get("fuels", []):
             prezzo = f.get("price")
             if not isinstance(prezzo, (int, float)) or not f.get("insertDate"):
@@ -144,6 +155,15 @@ def aggiorna_live(impianti, ids):
     return aggiornati
 
 
+def csv_di_oggi_gia_letto(estrazione):
+    """Il file delle 8 del giorno N ha come data di estrazione il giorno N-1."""
+    try:
+        letto = date.fromisoformat(estrazione)
+    except (TypeError, ValueError):
+        return False
+    return letto >= datetime.now(ROMA).date() - timedelta(days=1)
+
+
 def main():
     config = json.loads(CONFIG.read_text(encoding="utf-8"))
     province = {p.strip().upper() for p in config.get("province", []) if p.strip()}
@@ -158,19 +178,26 @@ def main():
             vecchio = {}
     vecchi = vecchio.get("impianti", {})
 
+    # Il MIMIT pubblica i CSV una volta al giorno: se abbiamo già quello di oggi
+    # non serve riscaricarlo, si aggiornano solo i prezzi "live".
     # Se il MIMIT non risponde si riparte dal data.json precedente:
     # i prezzi "live" arrivano da un altro server e possono funzionare lo stesso.
-    try:
-        _, anagrafica = leggi_csv(scarica(URL_ANAGRAFICA))
-        estrazione, prezzi = leggi_csv(scarica(URL_PREZZI))
-        print(f"Anagrafica: {len(anagrafica)} righe, prezzi: {len(prezzi)} righe")
-    except RuntimeError as e:
-        if not vecchi:
-            raise
-        print(f"{e}: uso i dati del data.json precedente", file=sys.stderr)
-        avviso("Il MIMIT non ha risposto: i prezzi open data sono quelli dell'aggiornamento precedente")
+    if vecchi and csv_di_oggi_gia_letto(vecchio.get("estrazione")):
+        print(f"CSV del MIMIT già letto (estrazione {vecchio['estrazione']}): solo prezzi live")
         anagrafica, prezzi = [], []
-        estrazione = vecchio.get("estrazione", "")
+        estrazione = vecchio["estrazione"]
+    else:
+        try:
+            _, anagrafica = leggi_csv(scarica(URL_ANAGRAFICA))
+            estrazione, prezzi = leggi_csv(scarica(URL_PREZZI))
+            print(f"Anagrafica: {len(anagrafica)} righe, prezzi: {len(prezzi)} righe")
+        except RuntimeError as e:
+            if not vecchi:
+                raise
+            print(f"{e}: uso i dati del data.json precedente", file=sys.stderr)
+            avviso("Il MIMIT non ha risposto: i prezzi open data sono quelli dell'aggiornamento precedente")
+            anagrafica, prezzi = [], []
+            estrazione = vecchio.get("estrazione", "")
 
     impianti = {}
     for a in anagrafica:

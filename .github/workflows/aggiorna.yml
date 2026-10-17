@@ -21,6 +21,8 @@ concurrency:
 jobs:
   aggiorna:
     runs-on: ubuntu-latest
+    # Rete di sicurezza se i server del MIMIT smettono di rispondere.
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
