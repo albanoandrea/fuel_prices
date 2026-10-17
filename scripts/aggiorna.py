@@ -34,6 +34,14 @@ ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config.json"
 OUTPUT = ROOT / "data.json"
 
+# Problemi da segnalare nell'app (e come warning su GitHub Actions).
+AVVISI = []
+
+
+def avviso(msg):
+    AVVISI.append(msg)
+    print(f"::warning::{msg}")
+
 
 def scarica(url, tentativi=3, timeout=60):
     headers = {
@@ -109,14 +117,16 @@ def aggiorna_prezzo(prezzi, chiave, prezzo, d):
 def aggiorna_live(impianti, ids):
     """Prezzi in tempo reale per pochi distributori. Se non risponde, si va avanti."""
     aggiornati = 0
+    falliti = []
     for iid in ids:
         if iid not in impianti:
-            print(f"Live: {iid} non è nelle province di config.json", file=sys.stderr)
+            avviso(f"Il benzinaio {iid} in \"live\" non è nelle province di config.json")
             continue
         try:
             dati = json.loads(scarica(URL_LIVE.format(iid), tentativi=2, timeout=30))
         except Exception as e:  # noqa: BLE001
             print(f"Live: impossibile leggere {iid}: {e}", file=sys.stderr)
+            falliti.append(iid)
             continue
         for f in dati.get("fuels", []):
             prezzo = f.get("price")
@@ -128,6 +138,9 @@ def aggiorna_live(impianti, ids):
             if aggiorna_prezzo(impianti[iid]["prezzi"], chiave, float(prezzo), d):
                 aggiornati += 1
         time.sleep(0.5)
+    if falliti:
+        avviso(f"Prezzi in tempo reale non letti per {len(falliti)} benzinai su {len(ids)} "
+               f"({', '.join(falliti)})")
     return aggiornati
 
 
@@ -155,6 +168,7 @@ def main():
         if not vecchi:
             raise
         print(f"{e}: uso i dati del data.json precedente", file=sys.stderr)
+        avviso("Il MIMIT non ha risposto: i prezzi open data sono quelli dell'aggiornamento precedente")
         anagrafica, prezzi = [], []
         estrazione = vecchio.get("estrazione", "")
 
@@ -183,6 +197,9 @@ def main():
         if iid not in impianti and v.get("pr") in province:
             impianti[iid] = v
 
+    if anagrafica and not impianti:
+        avviso("Nel file del MIMIT non c'è nessun benzinaio delle province di config.json")
+
     aggiornati = 0
     for p in prezzi:
         iid = p.get("idimpianto")
@@ -202,6 +219,7 @@ def main():
         "aggiornato": datetime.now(timezone.utc).isoformat(timespec="minutes"),
         "estrazione": estrazione,
         "province": sorted(province),
+        "avvisi": AVVISI,
         "impianti": impianti,
     }
     OUTPUT.write_text(json.dumps(dati, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")

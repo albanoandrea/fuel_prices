@@ -128,6 +128,14 @@ h1 {
 .orig { color: var(--muted); margin: 0 0 2px; font-weight: 600; }
 .seg[hidden] { display: none; }
 .geomsg { color: var(--up); font-size: 14px; margin: 8px 0 0; }
+.stato { color: var(--muted); font-size: 13px; margin: -8px 0 12px; }
+.warn {
+  background: var(--surface); border: 1px solid var(--up); border-left-width: 4px;
+  border-radius: 10px; padding: 10px 12px; margin: 12px 0 0; font-size: 14px;
+}
+.warn[hidden] { display: none; }
+.warn strong { color: var(--up); }
+.warn ul { margin: 4px 0 0; padding-left: 18px; }
 
 .add { margin-top: 14px; width: 100%; justify-content: center; padding: 13px; font-size: 16px; }
 
@@ -169,6 +177,7 @@ footer a { color: inherit; }
 <div class="wrap">
   <header>
     <h1>I miei benzinai</h1>
+    <p class="stato" id="stato"></p>
     <div class="controls">
       <div class="seg" id="fuel" role="group" aria-label="Carburante"></div>
       <div class="seg" id="mode" role="group" aria-label="Modalità"></div>
@@ -178,6 +187,7 @@ footer a { color: inherit; }
       </div>
     </div>
     <p class="geomsg" id="geomsg" hidden></p>
+    <div class="warn" id="warn" role="status" hidden></div>
   </header>
 
   <main id="main"><p class="hint">Carico i prezzi…</p></main>
@@ -450,9 +460,46 @@ $("#geo").addEventListener("click", () => {
   if (wantPos) locate(); else { pos = null; geoMsg(""); refresh(); }
 });
 /* Quando riapri l'app, aggiorna la posizione. */
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") locate(); });
+/* Se è passato un po' di tempo, ricarica anche i prezzi. */
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  locate();
+  if (data && Date.now() - loadedAt > 15 * 60000) load();
+});
+
+/* Quando è stato fatto l'ultimo aggiornamento, e se qualcosa non va. */
+function hhmm(d) { return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
+function whenText(d) {
+  const oggi = new Date(); oggi.setHours(0, 0, 0, 0);
+  const giorno = new Date(d); giorno.setHours(0, 0, 0, 0);
+  const diff = Math.round((oggi - giorno) / 86400000);
+  const g = diff === 0 ? "oggi" : diff === 1 ? "ieri" : `il ${shortDate(d)}`;
+  return `${g} alle ${hhmm(d)}`;
+}
+function showStatus() {
+  const agg = data.aggiornato ? new Date(data.aggiornato) : null;
+  const ok = agg && !isNaN(agg);
+  $("#stato").textContent = ok ? `Aggiornato ${whenText(agg)}` : "";
+  const avvisi = [...(data.avvisi || [])];
+  /* Di giorno l'aggiornamento gira ogni ora; di notte è fermo per circa 10 ore. */
+  const ore = ok ? (Date.now() - agg.getTime()) / 3600000 : Infinity;
+  const h = new Date().getHours();
+  if (ore > (h >= 9 && h < 22 ? 3 : 13)) {
+    avvisi.unshift("L'aggiornamento automatico sembra fermo: controlla la scheda Actions su GitHub.");
+  }
+  const estr = data.estrazione ? new Date(`${data.estrazione}T12:00`) : null;
+  if (estr && !isNaN(estr) && Date.now() - estr.getTime() > 3 * 86400000) {
+    avvisi.push(`Il file open data del MIMIT è fermo al ${shortDate(estr)}.`);
+  }
+  const w = $("#warn");
+  w.hidden = !avvisi.length;
+  w.innerHTML = avvisi.length
+    ? `<strong>Qualcosa non va</strong><ul>${avvisi.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>`
+    : "";
+}
 
 /* Avvio */
+let loadedAt = 0;
 async function load() {
   try {
     const r = await fetch(`data.json?t=${Date.now()}`, { cache: "no-store" });
@@ -462,7 +509,9 @@ async function load() {
     $("#main").innerHTML = `<div class="empty"><p>I prezzi non sono ancora pronti. Su GitHub apri la scheda Actions, scegli “Aggiorna prezzi” e premi “Run workflow”. Poi ricarica questa pagina.</p></div>`;
     return;
   }
+  loadedAt = Date.now();
   buildIndex();
+  showStatus();
   const n = Object.keys(data.impianti).length;
   const quando = data.estrazione ? data.estrazione.split("-").reverse().join("/") : "";
   $("#foot").innerHTML = `Dati ufficiali MIMIT${quando ? ` del ${quando}` : ""}, ${n} benzinai in provincia di ${esc((data.province || []).join(", "))}. ` +
