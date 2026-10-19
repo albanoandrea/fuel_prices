@@ -1,3 +1,8 @@
 name = "benzinai"
 main = "worker.js"
 compatibility_date = "2026-09-01"
+
+# Il MIMIT risponde solo agli IP italiani. Senza questo il Worker gira vicino a chi lo chiama:
+# per GitHub Actions negli Stati Uniti, e lì il MIMIT non risponde. aws:eu-south-1 è Milano.
+[placement]
+region = "aws:eu-south-1"

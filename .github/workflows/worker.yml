@@ -1,0 +1,22 @@
+name: Pubblica Worker
+
+# Pubblica worker/ su Cloudflare quando cambia. Servono i secret
+# CLOUDFLARE_API_TOKEN e CLOUDFLARE_ACCOUNT_ID (vedi README).
+on:
+  push:
+    branches: [master]
+    paths: ["worker/**"]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker

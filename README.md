@@ -44,13 +44,21 @@ Per provarlo:
 
 Se `/prezzi` restituisce `{}`, o le pagine non finiscono di caricare, il MIMIT ha bloccato anche Cloudflare. L'app mostra i prezzi di `data.json` e lo script prova il MIMIT diretto.
 
+Il MIMIT risponde solo agli IP italiani. Per questo `worker/wrangler.toml` fa girare il Worker vicino a Milano (`[placement]`), anche quando lo chiama GitHub Actions dagli Stati Uniti.
+
 ### Aggiornare il codice del Worker
 
-Il codice su Cloudflare non si aggiorna da solo quando cambia `worker/worker.js`:
+`.github/workflows/worker.yml` pubblica `worker/` su Cloudflare a ogni push che lo modifica (oppure a mano: `gh workflow run worker.yml`).
+Non modificare il codice dal pannello di Cloudflare: verrebbe sovrascritto, e l'impostazione `[placement]` si applica solo da `wrangler.toml`.
 
-1. Su [dash.cloudflare.com](https://dash.cloudflare.com): **Compute (Workers)** → **Workers & Pages** → `benzinai`.
-2. **Edit code**: sostituisci tutto con il contenuto di `worker/worker.js` e premi **Deploy**.
+Il workflow usa due secret del repository, da impostare una volta sola:
 
-In alternativa, con Node installato: `cd worker` e poi `npx wrangler deploy`.
+- `CLOUDFLARE_API_TOKEN`: su [dash.cloudflare.com](https://dash.cloudflare.com) → icona del profilo → **Profile** → **API Tokens** → **Create Token** → modello **Edit Cloudflare Workers**.
+- `CLOUDFLARE_ACCOUNT_ID`: nella pagina **Workers & Pages**, a destra sotto **Account ID**.
+
+```sh
+gh secret set CLOUDFLARE_API_TOKEN
+gh secret set CLOUDFLARE_ACCOUNT_ID
+```
 
 Se il sito cambia indirizzo, aggiorna `ORIGINI` in `worker/worker.js`. Per provare l'app in locale usa `python -m http.server 8000`.
