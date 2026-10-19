@@ -8,6 +8,9 @@ conosciuto (preso dal data.json precedente).
 Per i distributori elencati in "live" (config.json) chiede anche i prezzi
 in tempo reale al servizio Osservaprezzi del MIMIT. Vince sempre il prezzo
 con la data di comunicazione più recente.
+
+Se in config.json c'è "proxy" (il Worker Cloudflare in worker/), passa da lì:
+il MIMIT blocca GitHub Actions.
 """
 
 import csv
@@ -115,44 +118,82 @@ def aggiorna_prezzo(prezzi, chiave, prezzo, d):
     return True
 
 
-def aggiorna_live(impianti, ids):
+def applica_live(prezzi, fuels):
+    """Prezzi in tempo reale di un benzinaio. Restituisce quanti ne ha aggiornati."""
+    aggiornati = 0
+    for f in fuels:
+        prezzo = f.get("price")
+        if not isinstance(prezzo, (int, float)) or not f.get("insertDate"):
+            continue
+        quando = datetime.fromisoformat(f["insertDate"].replace("Z", "+00:00"))
+        d = quando.astimezone(ROMA).strftime("%d/%m/%Y %H:%M:%S")
+        chiave = f"{f.get('name', '')}|{'1' if f.get('isSelf') else '0'}"
+        if aggiorna_prezzo(prezzi, chiave, float(prezzo), d):
+            aggiornati += 1
+    return aggiornati
+
+
+def leggi_live_proxy(ids, proxy):
+    """Tutti i benzinai in una richiesta al Worker. None se non risponde."""
+    try:
+        return json.loads(scarica(f"{proxy}/prezzi?ids={','.join(ids)}", tentativi=2, timeout=60))
+    except Exception as e:  # noqa: BLE001
+        print(f"Live via Worker: {e}", file=sys.stderr)
+        return None
+
+
+def aggiorna_live(impianti, ids, proxy=""):
     """Prezzi in tempo reale per pochi distributori. Se non risponde, si va avanti.
 
-    Se fallisce già il primo, il server è giù (o ci blocca): inutile aspettare
+    Prima prova il Worker (se c'è), poi il MIMIT diretto. Se col MIMIT diretto
+    fallisce già il primo, il server è giù (o ci blocca): inutile aspettare
     il timeout di tutti gli altri.
     """
-    aggiornati = 0
-    letti = 0
-    falliti = []
     for iid in ids:
         if iid not in impianti:
             avviso(f"Il benzinaio {iid} in \"live\" non è nelle province di config.json")
-            continue
-        try:
-            dati = json.loads(scarica(URL_LIVE.format(iid), tentativi=2, timeout=30))
-        except Exception as e:  # noqa: BLE001
-            print(f"Live: impossibile leggere {iid}: {e}", file=sys.stderr)
-            if not letti:
-                avviso("Il server dei prezzi in tempo reale non risponde: "
-                       "nessun benzinaio \"live\" aggiornato")
-                return aggiornati
-            falliti.append(iid)
-            continue
-        letti += 1
-        for f in dati.get("fuels", []):
-            prezzo = f.get("price")
-            if not isinstance(prezzo, (int, float)) or not f.get("insertDate"):
+    ids = [iid for iid in ids if iid in impianti]
+    if not ids:
+        return 0
+    aggiornati = 0
+    falliti = []
+    via_proxy = leggi_live_proxy(ids, proxy) if proxy else None
+    if via_proxy is not None:
+        for iid in ids:
+            if iid in via_proxy:
+                aggiornati += applica_live(impianti[iid]["prezzi"], via_proxy[iid])
+            else:
+                falliti.append(iid)
+    else:
+        letti = 0
+        for iid in ids:
+            try:
+                dati = json.loads(scarica(URL_LIVE.format(iid), tentativi=2, timeout=30))
+            except Exception as e:  # noqa: BLE001
+                print(f"Live: impossibile leggere {iid}: {e}", file=sys.stderr)
+                if not letti:
+                    avviso("Il server dei prezzi in tempo reale non risponde: "
+                           "nessun benzinaio \"live\" aggiornato")
+                    return aggiornati
+                falliti.append(iid)
                 continue
-            quando = datetime.fromisoformat(f["insertDate"].replace("Z", "+00:00"))
-            d = quando.astimezone(ROMA).strftime("%d/%m/%Y %H:%M:%S")
-            chiave = f"{f.get('name', '')}|{'1' if f.get('isSelf') else '0'}"
-            if aggiorna_prezzo(impianti[iid]["prezzi"], chiave, float(prezzo), d):
-                aggiornati += 1
-        time.sleep(0.5)
+            letti += 1
+            aggiornati += applica_live(impianti[iid]["prezzi"], dati.get("fuels", []))
+            time.sleep(0.5)
     if falliti:
         avviso(f"Prezzi in tempo reale non letti per {len(falliti)} benzinai su {len(ids)} "
                f"({', '.join(falliti)})")
     return aggiornati
+
+
+def scarica_csv(nome, url, proxy):
+    """Prima dal Worker (se c'è), poi direttamente dal MIMIT."""
+    if proxy:
+        try:
+            return scarica(f"{proxy}/csv/{nome}", tentativi=2, timeout=120)
+        except RuntimeError as e:
+            print(f"{e}: provo direttamente il MIMIT", file=sys.stderr)
+    return scarica(url)
 
 
 def csv_di_oggi_gia_letto(estrazione):
@@ -169,6 +210,7 @@ def main():
     province = {p.strip().upper() for p in config.get("province", []) if p.strip()}
     if not province:
         sys.exit("Nessuna provincia in config.json")
+    proxy = str(config.get("proxy", "")).strip().rstrip("/")
 
     vecchio = {}
     if OUTPUT.exists():
@@ -188,8 +230,8 @@ def main():
         estrazione = vecchio["estrazione"]
     else:
         try:
-            _, anagrafica = leggi_csv(scarica(URL_ANAGRAFICA))
-            estrazione, prezzi = leggi_csv(scarica(URL_PREZZI))
+            _, anagrafica = leggi_csv(scarica_csv("anagrafica", URL_ANAGRAFICA, proxy))
+            estrazione, prezzi = leggi_csv(scarica_csv("prezzi", URL_PREZZI, proxy))
             print(f"Anagrafica: {len(anagrafica)} righe, prezzi: {len(prezzi)} righe")
         except RuntimeError as e:
             if not vecchi:
@@ -240,7 +282,7 @@ def main():
             aggiornati += 1
 
     live = [str(x).strip() for x in config.get("live", []) if str(x).strip()]
-    live_aggiornati = aggiorna_live(impianti, live) if live else 0
+    live_aggiornati = aggiorna_live(impianti, live, proxy) if live else 0
 
     dati = {
         "aggiornato": datetime.now(timezone.utc).isoformat(timespec="minutes"),

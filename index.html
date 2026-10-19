@@ -232,8 +232,8 @@ function titleCase(s) {
 }
 
 function parseD(s) {
-  const m = /(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/.exec(s || "");
-  return m ? new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]) : null;
+  const m = /(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?/.exec(s || "");
+  return m ? new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +(m[6] || 0)) : null;
 }
 const MESI = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
 function shortDate(d) { return d ? `${d.getDate()} ${MESI[d.getMonth()]}` : ""; }
@@ -424,7 +424,8 @@ $("#results").addEventListener("click", (e) => {
 let timer;
 $("#q").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(search, 150); });
 function openSheet() { $("#sheet").hidden = false; search(); $("#q").focus(); }
-$("#close").onclick = () => { $("#sheet").hidden = true; render(); };
+/* Per i benzinai appena aggiunti ai preferiti servono i prezzi in tempo reale. */
+$("#close").onclick = () => { $("#sheet").hidden = true; render(); loadLive(); };
 
 /* Posizione: chiesta solo dopo aver toccato "Distanza". */
 function geoMsg(t) { const m = $("#geomsg"); m.textContent = t || ""; m.hidden = !t; }
@@ -479,12 +480,14 @@ function whenText(d) {
 function showStatus() {
   const agg = data.aggiornato ? new Date(data.aggiornato) : null;
   const ok = agg && !isNaN(agg);
-  $("#stato").textContent = ok ? `Aggiornato ${whenText(agg)}` : "";
+  $("#stato").textContent = (ok ? `Aggiornato ${whenText(agg)}` : "") +
+    (liveAt ? `${ok ? " · " : ""}i tuoi in tempo reale alle ${hhmm(new Date(liveAt))}` : "");
   const avvisi = [...(data.avvisi || [])];
   /* Di giorno l'aggiornamento gira ogni ora; di notte è fermo per circa 10 ore. */
+  /* Se i prezzi in tempo reale sono arrivati, i preferiti sono comunque aggiornati. */
   const ore = ok ? (Date.now() - agg.getTime()) / 3600000 : Infinity;
   const h = new Date().getHours();
-  if (ore > (h >= 9 && h < 22 ? 3 : 13)) {
+  if (!liveAt && ore > (h >= 9 && h < 22 ? 3 : 13)) {
     avvisi.unshift("L'aggiornamento automatico sembra fermo: controlla la scheda Actions su GitHub.");
   }
   const estr = data.estrazione ? new Date(`${data.estrazione}T12:00`) : null;
@@ -517,6 +520,56 @@ async function load() {
   $("#foot").innerHTML = `Dati ufficiali MIMIT${quando ? ` del ${quando}` : ""}, ${n} benzinai in provincia di ${esc((data.province || []).join(", "))}. ` +
     `Fonte: <a href="https://www.mimit.gov.it/it/open-data/elenco-dataset/carburanti-prezzi-praticati-e-anagrafica-degli-impianti" target="_blank" rel="noopener">open data MIMIT</a>, licenza IODL 2.0.`;
   render();
+  loadLive();
+}
+
+/* Prezzi in tempo reale dei preferiti, tramite il Worker Cloudflare ("proxy" in config.json).
+   Il MIMIT non accetta chiamate dirette dal browser. Se il Worker non risponde restano quelli di data.json. */
+let proxy = null;
+let liveAt = 0;
+const ROMA = new Intl.DateTimeFormat("it-IT", {
+  timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", year: "numeric",
+  hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23"
+});
+/* Stesso formato di data.json: "gg/mm/aaaa hh:mm:ss", ora italiana. */
+function romeD(iso) {
+  const p = Object.fromEntries(ROMA.formatToParts(new Date(iso)).map((x) => [x.type, x.value]));
+  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}:${p.second}`;
+}
+/* Come aggiorna_prezzo() in scripts/aggiorna.py: vince il prezzo comunicato più di recente. */
+function applyLive(prezzi, fuels) {
+  for (const f of fuels) {
+    if (typeof f.price !== "number" || !f.insertDate) continue;
+    const d = romeD(f.insertDate);
+    const k = `${f.name}|${f.isSelf ? "1" : "0"}`;
+    const old = prezzi[k] || {};
+    if ((parseD(old.d) || 0) > parseD(d)) continue;
+    const nuovo = { p: f.price, d };
+    if (old.p != null && old.p !== f.price) nuovo.pp = old.p;
+    else if (old.pp != null) nuovo.pp = old.pp;
+    prezzi[k] = nuovo;
+  }
+}
+async function loadLive() {
+  if (proxy === null) {
+    try {
+      const c = await (await fetch(`config.json?t=${Date.now()}`, { cache: "no-store" })).json();
+      proxy = String(c.proxy || "").trim().replace(/\/+$/, "");
+    } catch (e) { return; }
+  }
+  const ids = fav.filter((id) => data.impianti[id]).slice(0, 40);
+  if (!proxy || !ids.length) return;
+  try {
+    const r = await fetch(`${proxy}/prezzi?ids=${ids.join(",")}`, { signal: AbortSignal.timeout(20000) });
+    if (!r.ok) throw new Error(r.status);
+    const live = await r.json();
+    for (const [id, fuels] of Object.entries(live)) {
+      if (data.impianti[id]) applyLive(data.impianti[id].prezzi, fuels);
+    }
+    liveAt = Date.now();
+  } catch (e) { return; }
+  showStatus();
+  refresh();
 }
 
 buildSeg();
