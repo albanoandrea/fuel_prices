@@ -2,9 +2,10 @@ name: Aggiorna prezzi
 
 on:
   schedule:
-    # Ogni ora dalle 05:30 alle 19:30 UTC (circa dalle 7:30 alle 21:30 in Italia).
-    # Il file open data esce verso le 9 italiane; le altre ore servono per i prezzi "live".
-    - cron: "30 5-19 * * *"
+    # Alle 8:30, 9:30, 12:00 e 17:30 italiane (ora legale, UTC+2): 6:30, 7:30, 10:00 e 15:30 UTC.
+    # Il file open data esce verso le 9 italiane; le altre esecuzioni servono per i prezzi "live".
+    - cron: "30 6,7,15 * * *"
+    - cron: "0 10 * * *"
   workflow_dispatch: {}
   push:
     branches: [master]
