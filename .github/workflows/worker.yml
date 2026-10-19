@@ -20,3 +20,5 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: worker
+          # Di default l'azione usa Wrangler 3, che non conosce placement.region.
+          wranglerVersion: "4.151.2"
