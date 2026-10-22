@@ -483,11 +483,10 @@ function showStatus() {
   $("#stato").textContent = (ok ? `Aggiornato ${whenText(agg)}` : "") +
     (liveAt ? `${ok ? " · " : ""}i tuoi in tempo reale alle ${hhmm(new Date(liveAt))}` : "");
   const avvisi = [...(data.avvisi || [])];
-  /* Di giorno l'aggiornamento gira ogni ora; di notte è fermo per circa 10 ore. */
+  /* L'aggiornamento gira due volte al giorno (e GitHub può ritardarlo di qualche ora). */
   /* Se i prezzi in tempo reale sono arrivati, i preferiti sono comunque aggiornati. */
   const ore = ok ? (Date.now() - agg.getTime()) / 3600000 : Infinity;
-  const h = new Date().getHours();
-  if (!liveAt && ore > (h >= 9 && h < 22 ? 3 : 13)) {
+  if (!liveAt && ore > 30) {
     avvisi.unshift("L'aggiornamento automatico sembra fermo: controlla la scheda Actions su GitHub.");
   }
   const estr = data.estrazione ? new Date(`${data.estrazione}T12:00`) : null;

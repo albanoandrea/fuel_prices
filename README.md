@@ -29,7 +29,7 @@ gh run view
 - `scripts/aggiorna.py` scarica i CSV del MIMIT e crea `data.json` con i benzinai delle province in `config.json`.
 - `scripts/aggiorna_a_mano.py` fa lo stesso da questo PC, poi commit e push: serve quando il MIMIT non risponde a GitHub Actions.
 - In `config.json`, `live` elenca i codici MIMIT dei benzinai da aggiornare anche in tempo reale (servizio Osservaprezzi, non ufficiale come open data).
-- `.github/workflows/aggiorna.yml` esegue lo script quattro volte al giorno (8:30, 9:30, 12:00 e 17:30) e pubblica il sito su GitHub Pages.
+- `.github/workflows/aggiorna.yml` esegue lo script due volte al giorno (8:00 e 14:00 UTC; GitHub può ritardare i run di qualche ora) e pubblica il sito su GitHub Pages.
 - `index.html` è l'app: scegli i benzinai con la stella, restano salvati sul telefono.
 - `worker/` è un Worker Cloudflare che fa da tramite verso il MIMIT, che blocca GitHub Actions e non accetta chiamate dal browser. Se in `config.json` c'è `proxy`, lo usano sia lo script (per CSV e prezzi live) sia l'app, che a ogni apertura chiede i prezzi in tempo reale dei tuoi preferiti. Se il Worker non risponde, lo script prova direttamente il MIMIT e l'app mostra i prezzi di `data.json`.
 

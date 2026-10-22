@@ -2,10 +2,10 @@ name: Aggiorna prezzi
 
 on:
   schedule:
-    # Alle 8:30, 9:30, 12:00 e 17:30 italiane (ora legale, UTC+2): 6:30, 7:30, 10:00 e 15:30 UTC.
-    # Il file open data esce verso le 9 italiane; le altre esecuzioni servono per i prezzi "live".
-    - cron: "30 6,7,15 * * *"
-    - cron: "0 10 * * *"
+    # Alle 8:00 e 14:00 UTC: 10:00 e 16:00 italiane con l'ora legale, 9:00 e 15:00 con la solare.
+    # Il file open data esce verso le 9 italiane; il secondo run è una riserva se GitHub salta il primo.
+    # I prezzi in tempo reale dei preferiti li scarica l'app a ogni apertura.
+    - cron: "0 8,14 * * *"
   workflow_dispatch: {}
   push:
     branches: [master]
