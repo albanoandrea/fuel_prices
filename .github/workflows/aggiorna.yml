@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 10
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: ${{ steps.deploy.outputs.page_url || steps.deploy_retry.outputs.page_url }}
     steps:
       # Sempre l'ultima versione di master, anche quando si rilancia un run vecchio.
       - uses: actions/checkout@v5
@@ -57,5 +57,16 @@ jobs:
         with:
           path: .
 
+      # A volte deploy-pages parte prima che GitHub "veda" l'artifact appena caricato
+      # ("No artifacts named github-pages were found"): si aspetta e si riprova una volta.
       - id: deploy
+        uses: actions/deploy-pages@v5
+        continue-on-error: true
+
+      - name: Attesa prima di riprovare il deploy
+        if: steps.deploy.outcome == 'failure'
+        run: sleep 30
+
+      - id: deploy_retry
+        if: steps.deploy.outcome == 'failure'
         uses: actions/deploy-pages@v5
